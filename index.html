@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete Animation Sequence with Sound</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #ffdddd;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #canvas {
+            position: absolute;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <audio id="background-music" loop autoplay>
+        <source src="assets/backsound.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const hearts = [];
+        const bigHeartPoints = [];
+        const initialHeartCount = 3000;
+        const heartSize = 5;
+        const scatterHeartCount = 50;
+        let assembleProgress = 0;
+        let disperseProgress = 0;
+        let photoAssembleProgress = 0;
+        let textProgress = 0;
+        let photoDisperseProgress = 0;
+        let heartScatterProgress = 0;
+        let currentCharIndex = [0, 0];
+        let state = 'assemble';
+        let delayStart;
+
+        const photo = new Image();
+        photo.src = 'https://i.ibb.co.com/9wBtWSx/1000218384-removebg-preview.png';
+        const photoPieces = [];
+        const pieceSize = 10;
+        const photoScale = 0.7;
+
+        const finalTextLines = ["ICA", "NURFALAH"];
+
+        function createHeart(x, y, type = 'initial') {
+            const size = type === 'scatter' ? Math.random() * 20 + 30 : heartSize;
+            const depth = type === 'scatter' ? Math.random() * 1.5 + 0.5 : 1;
+            return {
+                x: x,
+                y: y,
+                size: size,
+                dx: (Math.random() - 0.5) * 4,
+                dy: (Math.random() - 0.5) * 4,
+                angle: Math.random() * Math.PI * 2,
+                angleSpeed: (Math.random() - 0.5) * 0.1,
+                depth: depth,
+                hue: Math.random() * 60 + 330
+            };
+        }
+
+        function drawHeart(x, y, size, hue, angle) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            ctx.scale(1, 0.6);
+            ctx.beginPath();
+            ctx.moveTo(0, size / 4);
+            ctx.quadraticCurveTo(0, 0, size / 4, 0);
+            ctx.quadraticCurveTo(size / 2, 0, size / 2, size / 4);
+            ctx.quadraticCurveTo(size / 2, 0, 3 * size / 4, 0);
+            ctx.quadraticCurveTo(size, 0, size, size / 4);
+            ctx.quadraticCurveTo(size, size / 2, size / 2, 3 * size / 4);
+            ctx.quadraticCurveTo(0, size / 2, 0, size / 4);
+            ctx.fillStyle = `hsla(${hue}, 100%, 60%, 0.8)`;
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function createBigHeartPoints() {
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const size = Math.min(canvas.width, canvas.height) * 0.6;
+
+            for (let t = 0; t <= Math.PI * 2; t += 0.01) {
+                const x = centerX + size * 16 * Math.pow(Math.sin(t), 3) / 16;
+                const y = centerY - size * (13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) / 16;
+                bigHeartPoints.push({ x, y });
+            }
+
+            for (let i = 0; i < 500; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = Math.random() * size * 0.4;
+                const x = centerX + radius * Math.cos(angle);
+                const y = centerY + radius * Math.sin(angle);
+                bigHeartPoints.push({ x, y });
+            }
+        }
+
+        function createPhotoPieces() {
+            const scaledWidth = photo.width * photoScale;
+            const scaledHeight = photo.height * photoScale;
+            const centerX = canvas.width / 2 - scaledWidth / 2;
+            const centerY = canvas.height / 2 - scaledHeight / 2;
+
+            for (let y = 0; y < scaledHeight; y += pieceSize) {
+                for (let x = 0; x < scaledWidth; x += pieceSize) {
+                    photoPieces.push({
+                        sourceX: x / photoScale,
+                        sourceY: y / photoScale,
+                        targetX: centerX + x,
+                        targetY: centerY + y,
+                        currentX: centerX + x + (Math.random() - 0.5) * canvas.width,
+                        currentY: centerY + y + (Math.random() - 0.5) * canvas.height,
+                        rotation: Math.random() * Math.PI * 2,
+                        scale: Math.random() * 0.5 + 0.5,
+                        dx: (Math.random() - 0.5) * 10,
+                        dy: (Math.random() - 0.5) * 10
+                    });
+                }
+            }
+        }
+
+        function initInitialHearts() {
+            createBigHeartPoints();
+            for (let i = 0; i < initialHeartCount; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                hearts.push(createHeart(x, y));
+            }
+        }
+
+        function initScatterHearts() {
+            for (let i = 0; i < scatterHeartCount; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                hearts.push(createHeart(x, y, 'scatter'));
+            }
+        }
+
+        function init() {
+            createPhotoPieces();
+            initInitialHearts();
+        }
+
+        function easeInOutCubic(t) {
+            return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        }
+
+        function drawPhotoPieces() {
+            if (photoAssembleProgress >= 1) {
+                const scaledWidth = photo.width * photoScale;
+                const scaledHeight = photo.height * photoScale;
+                const centerX = canvas.width / 2 - scaledWidth / 2;
+                const centerY = canvas.height / 2 - scaledHeight / 2;
+                ctx.drawImage(photo, centerX, centerY, scaledWidth, scaledHeight);
+            } else {
+                photoPieces.forEach(piece => {
+                    ctx.save();
+                    ctx.translate(piece.currentX + pieceSize / 2, piece.currentY + pieceSize / 2);
+                    ctx.rotate(piece.rotation);
+                    ctx.scale(piece.scale * photoScale, piece.scale * photoScale);
+                    ctx.drawImage(photo, 
+                        piece.sourceX, piece.sourceY, pieceSize / photoScale, pieceSize / photoScale,
+                        -pieceSize / 2, -pieceSize / 2, pieceSize, pieceSize);
+                    ctx.restore();
+                });
+            }
+        }
+
+        function drawText() {
+            const text = "Hallo this is my Tantrum People. Her name's .....";
+            ctx.font = '24px Arial';
+            ctx.fillStyle = 'black';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+
+            const lines = text.split('.');
+            const lineHeight = 30;
+            const startY = canvas.height / 2 + (photo.height * photoScale) / 2 + 20;
+
+            lines.forEach((line, index) => {
+                const y = startY + index * lineHeight;
+                const charCount = Math.floor(line.length * textProgress);
+                ctx.fillText(line.slice(0, charCount), canvas.width / 2, y);
+            });
+        }
+
+        function drawFinalText() {
+            const fontSize = 60;
+            ctx.font = `bold ${fontSize}px 'Arial'`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            const colors = ['#FF69B4', '#FF0000'];
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            finalTextLines.forEach((line, lineIndex) => {
+                const yOffset = lineIndex * fontSize * 1.2;
+                const displayText = line.slice(0, currentCharIndex[lineIndex]);
+                ctx.fillStyle = colors[lineIndex % colors.length];
+                ctx.shadowColor = colors[lineIndex % colors.length];
+                ctx.shadowBlur = 20;
+                ctx.fillText(displayText, centerX, centerY + yOffset);
+
+                if (currentCharIndex[lineIndex] < line.length) {
+                    currentCharIndex[lineIndex] += 0.1;
+                }
+            });
+
+            if (currentCharIndex[0] >= finalTextLines[0].length && currentCharIndex[1] >= finalTextLines[1].length) {
+                currentCharIndex = [0, 0];
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            switch (state) {
+                case 'assemble':
+                    ctx.fillStyle = '#ffdddd';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    assembleProgress += 0.005;
+                    if (assembleProgress >= 1) {
+                        assembleProgress = 1;
+                        state = 'delay';
+                        delayStart = Date.now();
+                    }
+                    animateInitialHearts();
+                    break;
+                case 'delay':
+                    ctx.fillStyle = '#ffdddd';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    animateInitialHearts();
+                    if (Date.now() - delayStart > 5000) {
+                        state = 'disperse';
+                    }
+                    break;
+                case 'disperse':
+                    ctx.fillStyle = '#ffdddd';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    disperseProgress += 0.01;
+                    if (disperseProgress >= 1) {
+                        disperseProgress = 1;
+                        state = 'photo';
+                    }
+                    animateDisperse();
+                    break;
+                case 'photo':
+                    ctx.fillStyle = '#ffdddd';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    photoAssembleProgress += 0.005;
+                    if (photoAssembleProgress >= 1) {
+                        photoAssembleProgress = 1;
+                        state = 'text';
+                    }
+                    animatePhotoAssembly();
+                    break;
+                case 'text':
+                    ctx.fillStyle = '#ffdddd';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    textProgress += 0.01;
+                    if (textProgress >= 1) {
+                        textProgress = 1;
+                        if (Date.now() - delayStart > 5000) {
+                            state = 'photoDisperse';
+                            photoDisperseProgress = 0;
+                        }
+                    }
+                    drawPhotoPieces();
+                    drawText();
+                    break;
+                case 'photoDisperse':
+                    ctx.fillStyle = '#ffdddd';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    photoDisperseProgress += 0.01;
+                    if (photoDisperseProgress >= 1) {
+                        photoDisperseProgress = 1;
+                        state = 'scatter';
+                        hearts.length = 0;
+                        initScatterHearts();
+                    }
+                    animatePhotoDisperse();
+                    break;
+                case 'scatter':
+                    ctx.fillStyle = '#ffdddd';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    animateScatterHearts();
+                    drawFinalText();
+                    break;
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        function animateInitialHearts() {
+            const easedProgress = easeInOutCubic(assembleProgress);
+
+            hearts.forEach((heart, index) => {
+                const targetPoint = bigHeartPoints[index % bigHeartPoints.length];
+                
+                heart.targetX = targetPoint.x;
+                heart.targetY = targetPoint.y;
+
+                heart.x += (heart.targetX - heart.x) * 0.05 * easedProgress + heart.dx * (1 - easedProgress);
+                heart.y += (heart.targetY - heart.y) * 0.05 * easedProgress + heart.dy * (1 - easedProgress);
+
+                heart.angle += heart.angleSpeed;
+
+                drawHeart(heart.x, heart.y, heart.size, heart.hue, heart.angle);
+            });
+        }
+
+        function animateDisperse() {
+            hearts.forEach(heart => {
+                heart.x += heart.dx * 5;
+                heart.y += heart.dy * 5;
+                heart.size *= 0.99;
+
+                if (heart.size > 0.1) {
+                    drawHeart(heart.x, heart.y, heart.size, heart.hue, heart.angle);
+                }
+            });
+        }
+
+        function animatePhotoAssembly() {
+            const easedProgress = easeInOutCubic(photoAssembleProgress);
+            photoPieces.forEach(piece => {
+                piece.currentX += (piece.targetX - piece.currentX) * 0.1 * easedProgress;
+                piece.currentY += (piece.targetY - piece.currentY) * 0.1 * easedProgress;
+                piece.rotation *= (1 - easedProgress);
+                piece.scale = piece.scale * (1 - easedProgress) + easedProgress;
+            });
+            drawPhotoPieces();
+        }
+
+        function animatePhotoDisperse() {
+            const easedProgress = easeInOutCubic(photoDisperseProgress);
+            photoPieces.forEach(piece => {
+                piece.currentX += piece.dx * easedProgress;
+                piece.currentY += piece.dy * easedProgress;
+                piece.rotation += 0.1 * easedProgress;
+                piece.scale = 1 - 0.5 * easedProgress;
+            });
+            drawPhotoPieces();
+            
+            ctx.globalAlpha = 1 - easedProgress;
+            drawText();
+            ctx.globalAlpha = 1;
+        }
+
+        function animateScatterHearts() {
+            hearts.forEach(heart => {
+                heart.x += heart.dx * 0.5;
+                heart.y += heart.dy * 0.5;
+                heart.angle += heart.angleSpeed;
+
+                if (heart.size > 0.1) {
+                    drawHeart(heart.x, heart.y, heart.size * heart.depth, heart.hue, heart.angle);
+                }
+            });
+
+            hearts.forEach((heart, index) => {
+                if (Math.random() > 0.95) {
+                    hearts[index] = createHeart(Math.random() * canvas.width, Math.random() * canvas.height, 'scatter');
+                }
+            });
+        }
+
+        photo.onload = () => {
+            init();
+            animate();
+        };
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            photoPieces.length = 0;
+            hearts.length = 0;
+            init();
+        });
+    </script>
+</body>
+</html>
